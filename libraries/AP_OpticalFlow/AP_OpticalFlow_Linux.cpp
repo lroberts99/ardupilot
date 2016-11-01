@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -91,14 +90,14 @@ bool AP_OpticalFlow_Linux::read(optical_flow_s* report)
 
     // Perform the writing and reading in a single command
     if (PX4FLOW_REG == 0x00) {
-        if (!_dev->read_registers(0, val, I2C_FRAME_SIZE + I2C_INTEGRAL_FRAME_SIZE)) {
+        if (!_dev->read_registers(PX4FLOW_REG, val, I2C_FRAME_SIZE + I2C_INTEGRAL_FRAME_SIZE)) {
             goto fail_transfer;
         }
         memcpy(&f_integral, &(val[I2C_FRAME_SIZE]), I2C_INTEGRAL_FRAME_SIZE);
     }
 
     if (PX4FLOW_REG == 0x16) {
-        if (!_dev->read_registers(0, val, I2C_INTEGRAL_FRAME_SIZE)) {
+        if (!_dev->read_registers(PX4FLOW_REG, val, I2C_INTEGRAL_FRAME_SIZE)) {
             goto fail_transfer;
         }
         memcpy(&f_integral, val, I2C_INTEGRAL_FRAME_SIZE);

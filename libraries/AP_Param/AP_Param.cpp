@@ -1,4 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -32,6 +31,7 @@
 #include <AP_Math/AP_Math.h>
 #include <GCS_MAVLink/GCS.h>
 #include <StorageManager/StorageManager.h>
+#include <stdio.h>
 
 extern const AP_HAL::HAL &hal;
 
@@ -78,6 +78,8 @@ void AP_Param::eeprom_write_check(const void *ptr, uint16_t ofs, uint8_t size)
     _storage.write_block(ofs, ptr, size);
 }
 
+bool AP_Param::_hide_disabled_groups = true;
+
 // write a sentinal value at the given offset
 void AP_Param::write_sentinal(uint16_t ofs)
 {
@@ -112,7 +114,7 @@ void AP_Param::erase_all(void)
    level gets the next 6 bits, and the 3rd level gets the last 6
    bits. This limits groups to having at most 64 elements.
 */
-uint32_t AP_Param::group_id(const struct GroupInfo *grpinfo, uint8_t base, uint8_t i, uint8_t shift)
+uint32_t AP_Param::group_id(const struct GroupInfo *grpinfo, uint32_t base, uint8_t i, uint8_t shift)
 {
     if (grpinfo[i].idx == 0 && shift != 0 && !(grpinfo[i].flags & AP_PARAM_NO_SHIFT)) {
         /*
@@ -309,7 +311,7 @@ bool AP_Param::get_base(const struct Info &info, ptrdiff_t &base)
 const struct AP_Param::Info *AP_Param::find_by_header_group(struct Param_header phdr, void **ptr,
                                                             uint16_t vindex,
                                                             const struct GroupInfo *group_info,
-                                                            uint8_t group_base,
+                                                            uint32_t group_base,
                                                             uint8_t group_shift,
                                                             ptrdiff_t group_offset)
 {
@@ -1167,20 +1169,24 @@ void AP_Param::setup_object_defaults(const void *object_pointer, const struct Gr
 
 // set a value directly in an object. This should only be used by
 // example code, not by mainline vehicle code
-void AP_Param::set_object_value(const void *object_pointer, 
-                                const struct GroupInfo *group_info, 
+bool AP_Param::set_object_value(const void *object_pointer,
+                                const struct GroupInfo *group_info,
                                 const char *name, float value)
 {
     ptrdiff_t base = (ptrdiff_t)object_pointer;
     uint8_t type;
+    bool found = false;
     for (uint8_t i=0;
          (type=group_info[i].type) != AP_PARAM_NONE;
          i++) {
         if (strcmp(name, group_info[i].name) == 0 && type <= AP_PARAM_FLOAT) {
             void *ptr = (void *)(base + group_info[i].offset);
             set_value((enum ap_var_type)type, ptr, value);
+            // return true here ?
+            found = true;
         }
     }
+    return found;
 }
 
 
@@ -1213,7 +1219,14 @@ bool AP_Param::load_all(void)
       if the HAL specifies a defaults parameter file then override
       defaults using that file
      */
-    load_defaults_file(hal.util->get_custom_defaults_file());
+    const char *default_file = hal.util->get_custom_defaults_file();
+    if (default_file) {
+        if (load_defaults_file(default_file)) {
+            printf("Loaded defaults from %s\n", default_file);
+        } else {
+            printf("Failed to load defaults from %s\n", default_file);
+        }
+    }
 #endif
 
     while (ofs < _storage.size()) {
@@ -1317,7 +1330,7 @@ AP_Param *AP_Param::first(ParamToken *token, enum ap_var_type *ptype)
 /// as needed
 AP_Param *AP_Param::next_group(uint16_t vindex, const struct GroupInfo *group_info,
                                bool *found_current,
-                               uint8_t group_base,
+                               uint32_t group_base,
                                uint8_t group_shift,
                                ptrdiff_t group_offset,
                                ParamToken *token,
@@ -1449,7 +1462,8 @@ AP_Param *AP_Param::next_scalar(ParamToken *token, enum ap_var_type *ptype)
                                                                     ginfo, group_nesting, &idx);
         if (info && ginfo &&
             (ginfo->flags & AP_PARAM_FLAG_ENABLE) &&
-            ((AP_Int8 *)ap)->get() == 0) {
+            ((AP_Int8 *)ap)->get() == 0 &&
+            _hide_disabled_groups) {
             /*
               this is a disabled parameter tree, include this
               parameter but not others below it. We need to keep

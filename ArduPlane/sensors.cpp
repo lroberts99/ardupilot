@@ -1,5 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include "Plane.h"
 #include <AP_RSSI/AP_RSSI.h>
 
@@ -155,4 +153,20 @@ void Plane::rpm_update(void)
             DataFlash.Log_Write_RPM(rpm_sensor);
         }
     }
+}
+
+/*
+  update AP_Button
+ */
+void Plane::button_update(void)
+{
+    g2.button.update();
+}
+
+/*
+  update AP_ICEngine
+ */
+void Plane::ice_update(void)
+{
+    g2.ice_control.update();
 }

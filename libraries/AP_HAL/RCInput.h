@@ -10,7 +10,7 @@ public:
     /**
      * Call init from the platform hal instance init, so that both the type of
      * the RCInput implementation and init argument (e.g. ISRRegistry) are
-     * known to the programmer. (Its too difficult to describe this dependency
+     * known to the programmer. (It's too difficult to describe this dependency
      * in the C++ type system.)
      */
     virtual void init() = 0;
@@ -52,5 +52,5 @@ public:
     virtual void clear_overrides() = 0;
 
     /* execute receiver bind */
-    virtual bool rc_bind(int dsmMode) { return false; };
+    virtual bool rc_bind(int dsmMode) { return false; }
 };

@@ -1,5 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include "Plane.h"
 
 // set the nav_controller pointer to the right controller
@@ -63,7 +61,7 @@ void Plane::navigate()
         return;
     }
 
-    if (next_WP_loc.lat == 0) {
+    if (next_WP_loc.lat == 0 && next_WP_loc.lng == 0) {
         return;
     }
 
@@ -173,8 +171,7 @@ void Plane::update_loiter(uint16_t radius)
     }
 
     if (loiter.start_time_ms != 0 &&
-        quadplane.available() &&
-        quadplane.guided_mode != 0) {
+        quadplane.guided_mode_enabled()) {
         if (!auto_state.vtol_loiter) {
             auto_state.vtol_loiter = true;
             // reset loiter start time, so we don't consider the point
@@ -185,7 +182,7 @@ void Plane::update_loiter(uint16_t radius)
     } else if (loiter.start_time_ms == 0 &&
         control_mode == AUTO &&
         !auto_state.no_crosstrack &&
-        get_distance(current_loc, next_WP_loc) > radius*2) {
+        get_distance(current_loc, next_WP_loc) > radius*3) {
         // if never reached loiter point and using crosstrack and somewhat far away from loiter point
         // navigate to it like in auto-mode for normal crosstrack behavior
         nav_controller->update_waypoint(prev_WP_loc, next_WP_loc);
@@ -198,12 +195,11 @@ void Plane::update_loiter(uint16_t radius)
             auto_state.wp_proportion > 1) {
             // we've reached the target, start the timer
             loiter.start_time_ms = millis();
-            if (control_mode == GUIDED) {
+            if (control_mode == GUIDED || control_mode == AVOID_ADSB) {
                 // starting a loiter in GUIDED means we just reached the target point
                 gcs_send_mission_item_reached_message(0);
             }
-            if (quadplane.available() &&
-                quadplane.guided_mode != 0) {
+            if (quadplane.guided_mode_enabled()) {
                 quadplane.guided_start();
             }
         }

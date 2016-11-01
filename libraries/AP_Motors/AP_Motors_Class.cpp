@@ -1,4 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -32,6 +31,7 @@ AP_Motors::AP_Motors(uint16_t loop_rate, uint16_t speed_hz) :
     _pitch_in(0.0f),
     _yaw_in(0.0f),
     _throttle_in(0.0f),
+    _throttle_avg_max(0.0f),
     _throttle_filter(),
     _spool_desired(DESIRED_SHUT_DOWN),
     _batt_voltage(0.0f),
@@ -58,8 +58,13 @@ AP_Motors::AP_Motors(uint16_t loop_rate, uint16_t speed_hz) :
 
 void AP_Motors::armed(bool arm)
 {
-    _flags.armed = arm;
-    AP_Notify::flags.armed = arm;
+    if (_flags.armed != arm) {
+        _flags.armed = arm;
+        AP_Notify::flags.armed = arm;
+        if (!arm) {
+            save_params_on_disarm();
+        }
+    }
 };
 
 // pilot input in the -1 ~ +1 range for roll, pitch and yaw. 0~1 range for throttle

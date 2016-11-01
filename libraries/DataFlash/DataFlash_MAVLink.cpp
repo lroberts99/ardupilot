@@ -1,5 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 /* 
    DataFlash Remote(via MAVLink) logging
 */
@@ -52,7 +50,12 @@ void DataFlash_MAVLink::Init()
                              // the vehicles
 }
 
-uint16_t DataFlash_MAVLink::bufferspace_available() {
+bool DataFlash_MAVLink::logging_failed() const
+{
+    return !_sending_to_client;
+}
+
+uint32_t DataFlash_MAVLink::bufferspace_available() {
     return (_blockcount_free * 200 + remaining_space_in_current_block());
 }
 

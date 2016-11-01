@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 #pragma once
 
 /*
@@ -85,6 +84,10 @@ public:
         _home.alt        = 0;
         _home.lng        = 0;
         _home.lat        = 0;
+
+        _last_trim = _trim.get();
+        _rotation_autopilot_body_to_vehicle_body.from_euler(_last_trim.x, _last_trim.y, 0.0f);
+        _rotation_vehicle_body_to_autopilot_body = _rotation_autopilot_body_to_vehicle_body.transposed();
     }
 
     // empty virtual destructor
@@ -162,6 +165,16 @@ public:
         return _baro;
     }
 
+    // get the index of the current primary accelerometer sensor
+    virtual uint8_t get_primary_accel_index(void) const {
+        return _ins.get_primary_accel();
+    }
+
+    // get the index of the current primary gyro sensor
+    virtual uint8_t get_primary_gyro_index(void) const {
+        return _ins.get_primary_gyro();
+    }
+    
     // accelerometer values in the earth frame in m/s/s
     virtual const Vector3f &get_accel_ef(uint8_t i) const {
         return _accel_ef[i];
@@ -230,6 +243,8 @@ public:
     // return a DCM rotation matrix representing our current
     // attitude
     virtual const Matrix3f &get_rotation_body_to_ned(void) const = 0;
+    const Matrix3f& get_rotation_autopilot_body_to_vehicle_body(void) const { return _rotation_autopilot_body_to_vehicle_body; }
+    const Matrix3f& get_rotation_vehicle_body_to_autopilot_body(void) const { return _rotation_vehicle_body_to_autopilot_body; }
 
     // get our current position estimate. Return true if a position is available,
     // otherwise false. This call fills in lat, lng and alt
@@ -290,6 +305,18 @@ public:
     // order. This will only be accurate if have_inertial_nav() is
     // true
     virtual bool get_relative_position_NED(Vector3f &vec) const {
+        return false;
+    }
+
+    // return a position relative to home in meters, North/East
+    // order. Return true if estimate is valid
+    virtual bool get_relative_position_NE(Vector2f &vecNE) const {
+        return false;
+    }
+
+    // return a Down position relative to home in meters
+    // Return true if estimate is valid
+    virtual bool get_relative_position_D(float &posD) const {
         return false;
     }
 
@@ -420,6 +447,14 @@ public:
         return false;
     }
     
+    // get_variances - provides the innovations normalised using the innovation variance where a value of 0
+    // indicates prefect consistency between the measurement and the EKF solution and a value of of 1 is the maximum
+    // inconsistency that will be accpeted by the filter
+    // boolean false is returned if variances are not available
+    virtual bool get_variances(float &velVar, float &posVar, float &hgtVar, Vector3f &magVar, float &tasVar, Vector2f &offset) const {
+        return false;
+    }
+    
     // time that the AHRS has been up
     virtual uint32_t uptime_ms(void) const = 0;
 
@@ -427,6 +462,9 @@ public:
     int8_t get_ekf_type(void) const {
         return _ekf_type;
     }
+
+    // Retrieves the corrected NED delta velocity in use by the inertial navigation
+    virtual void getCorrectedDeltaVelocityNED(Vector3f& ret, float& dt) const { ret.zero(); _ins.get_delta_velocity(ret); dt = _ins.get_delta_velocity_dt(); }
     
 protected:
     AHRS_VehicleClass _vehicle_class;
@@ -480,6 +518,11 @@ protected:
 
     // a vector to capture the difference between the controller and body frames
     AP_Vector3f         _trim;
+
+    // cached trim rotations
+    Vector3f _last_trim;
+    Matrix3f _rotation_autopilot_body_to_vehicle_body;
+    Matrix3f _rotation_vehicle_body_to_autopilot_body;
 
     // the limit of the gyro drift claimed by the sensors, in
     // radians/s/s

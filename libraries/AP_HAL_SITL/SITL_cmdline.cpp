@@ -1,5 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include <AP_HAL/AP_HAL.h>
 
 #if CONFIG_HAL_BOARD == HAL_BOARD_SITL
@@ -27,6 +25,7 @@
 #include <SITL/SIM_Balloon.h>
 #include <SITL/SIM_FlightAxis.h>
 #include <SITL/SIM_Calibration.h>
+#include <SITL/SIM_XPlane.h>
 
 extern const AP_HAL::HAL& hal;
 
@@ -46,6 +45,7 @@ void SITL_State::_usage(void)
            "\t--home HOME        set home location (lat,lng,alt,yaw)\n"
            "\t--model MODEL      set simulation model\n"
            "\t--wipe             wipe eeprom and dataflash\n"
+           "\t--unhide-groups    parameter enumeration ignores AP_PARAM_FLAG_ENABLE\n"
            "\t--rate RATE        set SITL framerate\n"
            "\t--console          use console instead of TCP ports\n"
            "\t--instance N       set instance of SITL (adds 10*instance to all port numbers)\n"
@@ -66,6 +66,7 @@ static const struct {
     Aircraft *(*constructor)(const char *home_str, const char *frame_str);
 } model_constructors[] = {
     { "quadplane",          QuadPlane::create },
+    { "xplane",             XPlane::create },
     { "firefly",            QuadPlane::create },
     { "+",                  MultiCopter::create },
     { "quad",               MultiCopter::create },
@@ -92,6 +93,21 @@ static const struct {
     { "calibration",        Calibration::create },
 };
 
+void SITL_State::_set_signal_handlers(void) const
+{
+    struct sigaction sa_fpe = {};
+
+    sigemptyset(&sa_fpe.sa_mask);
+    sa_fpe.sa_handler = _sig_fpe;
+    sigaction(SIGFPE, &sa_fpe, nullptr);
+
+    struct sigaction sa_pipe = {};
+
+    sigemptyset(&sa_pipe.sa_mask);
+    sa_pipe.sa_handler = SIG_IGN; /* No-op SIGPIPE handler */
+    sigaction(SIGPIPE, &sa_pipe, nullptr);
+}
+
 void SITL_State::_parse_command_line(int argc, char * const argv[])
 {
     int opt;
@@ -105,9 +121,7 @@ void SITL_State::_parse_command_line(int argc, char * const argv[])
         AP_HAL::panic("out of memory");
     }
 
-    signal(SIGFPE, _sig_fpe);
-    // No-op SIGPIPE handler
-    signal(SIGPIPE, SIG_IGN);
+    _set_signal_handlers();
 
     setvbuf(stdout, (char *)0, _IONBF, 0);
     setvbuf(stderr, (char *)0, _IONBF, 0);
@@ -137,6 +151,7 @@ void SITL_State::_parse_command_line(int argc, char * const argv[])
     const struct GetOptLong::option options[] = {
         {"help",            false,  0, 'h'},
         {"wipe",            false,  0, 'w'},
+        {"unhide-groups",   false,  0, 'u'},
         {"speedup",         true,   0, 's'},
         {"rate",            true,   0, 'r'},
         {"console",         false,  0, 'C'},
@@ -158,7 +173,7 @@ void SITL_State::_parse_command_line(int argc, char * const argv[])
         {0, false, 0, 0}
     };
 
-    GetOptLong gopt(argc, argv, "hws:r:CI:P:SO:M:F:",
+    GetOptLong gopt(argc, argv, "hwus:r:CI:P:SO:M:F:",
                     options);
 
     while ((opt = gopt.getoption()) != -1) {
@@ -166,6 +181,9 @@ void SITL_State::_parse_command_line(int argc, char * const argv[])
         case 'w':
             AP_Param::erase_all();
             unlink("dataflash.bin");
+            break;
+        case 'u':
+            AP_Param::set_hide_disabled_groups(false);
             break;
         case 'r':
             _framerate = (unsigned)atoi(gopt.optarg);

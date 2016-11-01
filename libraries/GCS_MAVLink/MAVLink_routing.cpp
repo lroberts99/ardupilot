@@ -1,5 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -111,6 +109,11 @@ bool MAVLink_routing::check_and_forward(mavlink_channel_t in_channel, const mavl
     if (msg->msgid == MAVLINK_MSG_ID_HEARTBEAT) {
         // heartbeat needs special handling
         handle_heartbeat(in_channel, msg);
+        return true;
+    }
+
+    if (msg->msgid == MAVLINK_MSG_ID_ADSB_VEHICLE) {
+        // ADSB packets are not forwarded, they have their own stream rate
         return true;
     }
 

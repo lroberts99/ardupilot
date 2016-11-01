@@ -1,4 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -75,6 +74,7 @@ void Plane::setup_glide_slope(void)
      */
     switch (control_mode) {
     case RTL:
+    case AVOID_ADSB:
     case GUIDED:
         /* glide down slowly if above target altitude, but ascend more
            rapidly if below it. See
@@ -249,7 +249,7 @@ int32_t Plane::relative_target_altitude_cm(void)
     }
 #endif
     int32_t relative_alt = target_altitude.amsl_cm - home.alt;
-    relative_alt += int32_t(g.alt_offset)*100;
+    relative_alt += mission_alt_offset()*100;
     relative_alt += rangefinder_correction() * 100;
     return relative_alt;
 }
@@ -451,7 +451,7 @@ void Plane::setup_terrain_target_alt(Location &loc)
  */
 int32_t Plane::adjusted_altitude_cm(void)
 {
-    return current_loc.alt - (g.alt_offset*100);
+    return current_loc.alt - (mission_alt_offset()*100);
 }
 
 /*
@@ -462,6 +462,25 @@ int32_t Plane::adjusted_altitude_cm(void)
 int32_t Plane::adjusted_relative_altitude_cm(void)
 {
     return adjusted_altitude_cm() - home.alt;
+}
+
+
+/*
+  return the mission altitude offset. This raises or lowers all
+  mission items. It is primarily set using the ALT_OFFSET parameter,
+  but can also be adjusted by the rangefinder landing code for a
+  NAV_LAND command if we have aborted a steep landing
+ */
+float Plane::mission_alt_offset(void)
+{
+    float ret = g.alt_offset;
+    if (control_mode == AUTO &&
+            (auto_state.land_in_progress || auto_state.wp_is_land_approach)) {
+        // when landing after an aborted landing due to too high glide
+        // slope we use an offset from the last landing attempt
+        ret += auto_state.land_alt_offset;
+    }
+    return ret;
 }
 
 /*
@@ -581,6 +600,7 @@ float Plane::rangefinder_correction(void)
 void Plane::rangefinder_height_update(void)
 {
     float distance = rangefinder.distance_cm()*0.01f;
+    
     if ((rangefinder.status() == RangeFinder::RangeFinder_Good) && home_is_set != HOME_UNSET) {
         if (!rangefinder_state.have_initial_reading) {
             rangefinder_state.have_initial_reading = true;
@@ -596,8 +616,13 @@ void Plane::rangefinder_height_update(void)
         // catch Lidars that are giving a constant range, either due
         // to misconfiguration or a faulty sensor
         if (rangefinder_state.in_range_count < 10) {
-            if (fabsf(rangefinder_state.initial_range - distance) > 0.05f * rangefinder.max_distance_cm()*0.01f) {
+            if (!is_equal(distance, rangefinder_state.last_distance) &&
+                fabsf(rangefinder_state.initial_range - distance) > 0.05f * rangefinder.max_distance_cm()*0.01f) {
                 rangefinder_state.in_range_count++;
+            }
+            if (fabsf(rangefinder_state.last_distance - distance) > rangefinder.max_distance_cm()*0.01*0.2) {
+                // changes by more than 20% of full range will reset counter
+                rangefinder_state.in_range_count = 0;
             }
         } else {
             rangefinder_state.in_range = true;
@@ -613,6 +638,7 @@ void Plane::rangefinder_height_update(void)
                 gcs_send_text_fmt(MAV_SEVERITY_INFO, "Rangefinder engaged at %.2fm", (double)rangefinder_state.height_estimate);
             }
         }
+        rangefinder_state.last_distance = distance;
     } else {
         rangefinder_state.in_range_count = 0;
         rangefinder_state.in_range = false;
@@ -639,8 +665,10 @@ void Plane::rangefinder_height_update(void)
             rangefinder_state.correction = correction;
             rangefinder_state.initial_correction = correction;
             auto_state.initial_land_slope = auto_state.land_slope;
+            rangefinder_state.last_correction_time_ms = now;
         } else {
             rangefinder_state.correction = 0.8f*rangefinder_state.correction + 0.2f*correction;
+            rangefinder_state.last_correction_time_ms = now;
             if (fabsf(rangefinder_state.correction - rangefinder_state.initial_correction) > 30) {
                 // the correction has changed by more than 30m, reset use of Lidar. We may have a bad lidar
                 if (rangefinder_state.in_use) {
@@ -649,7 +677,7 @@ void Plane::rangefinder_height_update(void)
                 memset(&rangefinder_state, 0, sizeof(rangefinder_state));
             }
         }
-        rangefinder_state.last_correction_time_ms = now;
+        
     }
 }
 #endif

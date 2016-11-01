@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -22,6 +21,7 @@
 #include "SIM_Aircraft.h"
 #include "SIM_Motor.h"
 #include "SIM_Frame.h"
+#include "SIM_Sprayer.h"
 
 namespace SITL {
 
@@ -44,6 +44,12 @@ protected:
     // calculate rotational and linear accelerations
     void calculate_forces(const struct sitl_input &input, Vector3f &rot_accel, Vector3f &body_accel);
     Frame *frame;
+
+    // The numbers here are offsets into the input servos array
+    // (generally output-servo-number-1 e.g. 2 for throttle)
+    Sprayer sprayer{6, 7};
+
+    float gross_mass() const override;
 };
 
 }

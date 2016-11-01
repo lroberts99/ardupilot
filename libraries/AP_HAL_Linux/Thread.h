@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
  * Copyright (C) 2016  Intel Corporation. All rights reserved.
  *
@@ -23,8 +22,6 @@
 
 #include <AP_HAL/utility/functor.h>
 
-#include "AP_HAL_Linux_Namespace.h"
-
 namespace Linux {
 
 /*
@@ -41,6 +38,8 @@ public:
     bool start(const char *name, int policy, int prio);
 
     bool is_current_thread();
+
+    bool is_started() const { return _started; }
 
     size_t get_stack_usage();
 

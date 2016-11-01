@@ -1,5 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 #include "Plane.h"
 
 //Function that will read the radio data, limit servos and trigger a failsafe
@@ -39,7 +37,7 @@ void Plane::set_control_channels(void)
 
     // setup correct scaling for ESCs like the UAVCAN PX4ESC which
     // take a proportion of speed
-    hal.rcout->set_esc_scaling(channel_throttle->get_radio_min(), channel_throttle->get_radio_max());
+    g2.servo_channels.set_esc_scaling(channel_throttle->get_ch_out());
 }
 
 /*
@@ -55,38 +53,54 @@ void Plane::init_rc_in()
 }
 
 /*
-  initialise RC output channels
+  initialise RC output for main channels. This is done early to allow
+  for BRD_SAFETYENABLE=0 and early servo control
  */
-void Plane::init_rc_out()
+void Plane::init_rc_out_main()
 {
-    channel_roll->enable_out();
-    channel_pitch->enable_out();
-
+    // setup failsafe for bottom 4 channels. We don't do all channels
+    // yet as some may be for VTOL motors in a quadplane
+    RC_Channel::setup_failsafe_trim_mask(0x000F);
+    
     /*
       change throttle trim to minimum throttle. This prevents a
       configuration error where the user sets CH3_TRIM incorrectly and
       the motor may start on power up
      */
     channel_throttle->set_radio_trim(throttle_min());
+
+    channel_roll->enable_out();
+    channel_pitch->enable_out();
     
     if (arming.arming_required() != AP_Arming::YES_ZERO_PWM) {
         channel_throttle->enable_out();
     }
     channel_rudder->enable_out();
-    update_aux();
-    RC_Channel_aux::enable_aux_servos();
-
-    // Initialization of servo outputs
-    RC_Channel::output_trim_all();
-
-    // setup PWM values to send if the FMU firmware dies
-    RC_Channel::setup_failsafe_trim_all();  
 
     // setup PX4 to output the min throttle when safety off if arming
     // is setup for min on disarm
     if (arming.arming_required() == AP_Arming::YES_MIN_PWM) {
         hal.rcout->set_safety_pwm(1UL<<(rcmap.throttle()-1), throttle_min());
     }
+}
+
+/*
+  initialise RC output channels for aux channels
+ */
+void Plane::init_rc_out_aux()
+{
+    update_aux();
+    RC_Channel_aux::enable_aux_servos();
+
+    hal.rcout->cork();
+    
+    // Initialization of servo outputs
+    RC_Channel::output_trim_all();
+
+    servos_output();
+    
+    // setup PWM values to send if the FMU firmware dies
+    RC_Channel::setup_failsafe_trim_all();  
 }
 
 /*
@@ -107,8 +121,10 @@ void Plane::rudder_arm_disarm_check()
         return;
     }
 
-    // if not in a manual throttle mode then disallow rudder arming/disarming
-    if (auto_throttle_mode ) {
+    // if not in a manual throttle mode and not in CRUISE or FBWB
+    // modes then disallow rudder arming/disarming
+    if (auto_throttle_mode &&
+        (control_mode != CRUISE && control_mode != FLY_BY_WIRE_B)) {
         rudder_arm_timer = 0;
         return;      
     }
@@ -219,8 +235,11 @@ void Plane::read_radio()
         // in rudder only mode we discard rudder input and get target
         // attitude from the roll channel.
         rudder_input = 0;
-    } else {
+    } else if (stick_mixing_enabled()) {
         rudder_input = channel_rudder->get_control_in();
+    } else {
+        // no stick mixing
+        rudder_input = 0;
     }
 
     // check for transmitter tuning changes
@@ -330,6 +349,8 @@ void Plane::trim_control_surfaces()
     channel_roll->save_eeprom();
     channel_pitch->save_eeprom();
     channel_rudder->save_eeprom();
+
+    g2.servo_channels.set_trim();
 }
 
 void Plane::trim_radio()

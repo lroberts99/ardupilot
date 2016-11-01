@@ -1,4 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -70,7 +69,7 @@ public:
     AP_AHRS_NavEKF ahrs {ins, barometer, gps, rng, EKF, EKF2};
     AP_InertialNav_NavEKF inertial_nav{ahrs};
     AP_Vehicle::FixedWing aparm;
-    AP_Airspeed airspeed{aparm};
+    AP_Airspeed airspeed;
     DataFlash_Class dataflash{"Replay v0.1"};
 
 private:
@@ -176,6 +175,7 @@ private:
     const char **parse_list_from_string(const char *str);
     bool parse_param_line(char *line, char **vname, float &value);
     void load_param_file(const char *filename);
+    void set_signal_handlers(void);
 };
 
 enum {

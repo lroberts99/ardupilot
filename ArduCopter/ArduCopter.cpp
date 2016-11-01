@@ -1,5 +1,3 @@
-/// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 /*
    This program is free software: you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -95,14 +93,15 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK(auto_disarm_check,     10,     50),
     SCHED_TASK(auto_trim,             10,     75),
     SCHED_TASK(read_rangefinder,      20,    100),
+    SCHED_TASK(update_proximity,     100,     50),
     SCHED_TASK(update_altitude,       10,    100),
     SCHED_TASK(run_nav_updates,       50,    100),
-    SCHED_TASK(update_thr_average,   100,     90),
+    SCHED_TASK(update_throttle_hover,100,     90),
     SCHED_TASK(three_hz_loop,          3,     75),
     SCHED_TASK(compass_accumulate,   100,    100),
     SCHED_TASK(barometer_accumulate,  50,     90),
 #if PRECISION_LANDING == ENABLED
-    SCHED_TASK(update_precland,       50,     50),
+    SCHED_TASK(update_precland,      400,     50),
 #endif
 #if FRAME_CONFIG == HELI_FRAME
     SCHED_TASK(check_dynamic_flight,  50,     75),
@@ -127,10 +126,10 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
     SCHED_TASK(compass_cal_update,   100,    100),
     SCHED_TASK(accel_cal_update,      10,    100),
 #if ADSB_ENABLED == ENABLED
-    SCHED_TASK(adsb_update,            1,    100),
+    SCHED_TASK(avoidance_adsb_update, 10,    100),
 #endif
-#if FRSKY_TELEM_ENABLED == ENABLED
-    SCHED_TASK(frsky_telemetry_send,   5,     75),
+#if ADVANCED_FAILSAFE == ENABLED
+    SCHED_TASK(afs_fs_check,          10,    100),
 #endif
     SCHED_TASK(terrain_update,        10,    100),
 #if EPM_ENABLED == ENABLED
@@ -151,6 +150,8 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
 #ifdef USERHOOK_SUPERSLOWLOOP
     SCHED_TASK(userhook_SuperSlowLoop, 1,   75),
 #endif
+    SCHED_TASK(button_update,          5,    100),
+    SCHED_TASK(stats_update,           1,    100),
 };
 
 
@@ -207,6 +208,14 @@ void Copter::perf_update(void)
     pmTest1 = 0;
 }
 
+/*
+  update AP_Stats
+ */
+void Copter::stats_update(void)
+{
+    g2.stats.update();
+}
+
 void Copter::loop()
 {
     // wait for an INS sample
@@ -237,7 +246,7 @@ void Copter::loop()
     // the first call to the scheduler they won't run on a later
     // call until scheduler.tick() is called again
     uint32_t time_available = (timer + MAIN_LOOP_MICROS) - micros();
-    scheduler.run(time_available);
+    scheduler.run(time_available > MAIN_LOOP_MICROS ? 0u : time_available);
 }
 
 
@@ -263,8 +272,8 @@ void Copter::fast_loop()
     // --------------------
     read_inertia();
 
-    // check if ekf has reset target heading
-    check_ekf_yaw_reset();
+    // check if ekf has reset target heading or position
+    check_ekf_reset();
 
     // run the attitude controllers
     update_flight_mode();
@@ -314,9 +323,8 @@ void Copter::throttle_loop()
     heli_update_landing_swash();
 #endif
 
-#if GNDEFFECT_COMPENSATION == ENABLED
+    // compensate for ground effect (if enabled)
     update_ground_effect_detector();
-#endif // GNDEFFECT_COMPENSATION == ENABLED
 }
 
 // update_mount - update camera mount position
@@ -394,13 +402,16 @@ void Copter::ten_hz_logging_loop()
     if (should_log(MASK_LOG_IMU) || should_log(MASK_LOG_IMU_FAST) || should_log(MASK_LOG_IMU_RAW)) {
         DataFlash.Log_Write_Vibration(ins);
     }
+    if (should_log(MASK_LOG_CTUN)) {
+        attitude_control.control_monitor_log();
+        Log_Write_Proximity();
+    }
 #if FRAME_CONFIG == HELI_FRAME
     Log_Write_Heli();
 #endif
 }
 
-// fifty_hz_logging_loop
-// should be run at 50hz
+// twentyfive_hz_logging - should be run at 25hz
 void Copter::twentyfive_hz_logging()
 {
 #if HIL_MODE != HIL_MODE_DISABLED
@@ -424,6 +435,11 @@ void Copter::twentyfive_hz_logging()
     if (should_log(MASK_LOG_IMU) && !should_log(MASK_LOG_IMU_RAW)) {
         DataFlash.Log_Write_IMU(ins);
     }
+#endif
+
+#if PRECISION_LANDING == ENABLED
+    // log output
+    Log_Write_Precland();
 #endif
 }
 
@@ -476,9 +492,7 @@ void Copter::one_hz_loop()
         motors.set_frame_orientation(g.frame_orientation);
 
         // set all throttle channel settings
-        motors.set_throttle_range(g.throttle_min, channel_throttle->get_radio_min(), channel_throttle->get_radio_max());
-        // set hover throttle
-        motors.set_hover_throttle(g.throttle_mid);
+        motors.set_throttle_range(channel_throttle->get_radio_min(), channel_throttle->get_radio_max());
 #endif
     }
 
@@ -495,6 +509,14 @@ void Copter::one_hz_loop()
 
     // log terrain data
     terrain_logging();
+
+    adsb.set_is_flying(!ap.land_complete);
+    
+    // update error mask of sensors and subsystems. The mask uses the
+    // MAV_SYS_STATUS_* values from mavlink. If a bit is set then it
+    // indicates that the sensor or subsystem is present but not
+    // functioning correctly
+    update_sensor_status_flags();
 }
 
 // called at 50hz

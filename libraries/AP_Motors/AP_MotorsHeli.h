@@ -1,5 +1,3 @@
-// -*- tab-width: 4; Mode: C++; c-basic-offset: 4; indent-tabs-mode: nil -*-
-
 /// @file	AP_MotorsHeli.h
 /// @brief	Motor control class for Traditional Heli
 #pragma once
@@ -125,6 +123,8 @@ public:
     // supports_yaw_passthrough
     virtual bool supports_yaw_passthrough() const { return false; }
 
+    float get_throttle_hover() const { return 0.5f; }
+
     // var_info for holding Parameter information
     static const struct AP_Param::GroupInfo var_info[];
 
@@ -197,6 +197,8 @@ protected:
     AP_Int16        _rsc_idle_output;           // Rotor control output while at idle
     AP_Int16        _rsc_power_low;             // throttle value sent to throttle servo at zero collective pitch
     AP_Int16        _rsc_power_high;            // throttle value sent to throttle servo at maximum collective pitch
+    AP_Int16        _rsc_power_negc;            // throttle value sent to throttle servo at full negative collective pitch
+    AP_Int16        _rsc_slewrate;              // throttle slew rate (percentage per second)
     AP_Int8         _servo_test;                // sets number of cycles to test servo movement on bootup
 
     // internal variables

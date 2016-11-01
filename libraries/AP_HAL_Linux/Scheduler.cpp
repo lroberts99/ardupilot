@@ -41,6 +41,8 @@ extern const AP_HAL::HAL& hal;
 #if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_NAVIO ||    \
     CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_ERLEBRAIN2 || \
     CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BH || \
+    CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_DARK || \
+    CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_URUS || \
     CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_PXFMINI
 #define APM_LINUX_RCIN_RATE             2000
 #define APM_LINUX_TONEALARM_RATE        100
@@ -53,7 +55,7 @@ extern const AP_HAL::HAL& hal;
 
 #define SCHED_THREAD(name_, UPPER_NAME_)                        \
     {                                                           \
-        .name = "sched-" #name_,                                \
+        .name = "ap-" #name_,                                   \
         .thread = &_##name_##_thread,                           \
         .policy = SCHED_FIFO,                                   \
         .prio = APM_LINUX_##UPPER_NAME_##_PRIORITY,             \
@@ -185,7 +187,7 @@ void Scheduler::register_timer_process(AP_HAL::MemberProc proc)
 bool Scheduler::register_timer_process(AP_HAL::MemberProc proc,
                                        uint8_t freq_div)
 {
-#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BEBOP
+#if CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_BEBOP || CONFIG_HAL_BOARD_SUBTYPE == HAL_BOARD_SUBTYPE_LINUX_DISCO
     if (freq_div > 1) {
         return _register_timesliced_proc(proc, freq_div);
     }
